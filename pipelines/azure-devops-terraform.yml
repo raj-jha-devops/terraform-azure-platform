@@ -1,1 +1,58 @@
+trigger:
+- main
+
+variables:
+  terraformVersion: '1.5.7'
+  environment: 'dev'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+- stage: Terraform_Plan
+  displayName: Terraform Plan
+  jobs:
+  - job: Plan
+    steps:
+    - task: TerraformInstaller@1
+      inputs:
+        terraformVersion: $(terraformVersion)
+
+    - task: TerraformTaskV4@4
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        backendServiceArm: 'azure-service-connection'
+        backendAzureRmResourceGroupName: 'rg-terraform-state'
+        backendAzureRmStorageAccountName: 'tfstateplatform'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: '$(environment).terraform.tfstate'
+
+    - task: TerraformTaskV4@4
+      inputs:
+        provider: 'azurerm'
+        command: 'validate'
+
+    - task: TerraformTaskV4@4
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        environmentServiceNameAzureRM: 'azure-service-connection'
+
+- stage: Terraform_Apply
+  displayName: Terraform Apply
+  dependsOn: Terraform_Plan
+  condition: succeeded()
+  jobs:
+  - deployment: Apply
+    environment: 'dev'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: TerraformTaskV4@4
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              environmentServiceNameAzureRM: 'azure-service-connection'
 
